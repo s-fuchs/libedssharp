@@ -770,11 +770,11 @@ namespace libEDSsharp
 
             if (objecttype == ObjectType.ARRAY)
             {
-                writer.WriteLine(string.Format("SubNumber={0:X}", nosubindexes));
+                writer.WriteLine(string.Format("SubNumber=0x{0:X}", nosubindexes));
             }
             if (objecttype == ObjectType.REC)
             {
-                writer.WriteLine(string.Format("SubNumber={0:X}", nosubindexes));
+                writer.WriteLine(string.Format("SubNumber=0x{0:X}", nosubindexes));
             }
 
 
@@ -784,7 +784,7 @@ namespace libEDSsharp
                 if (dt == DataType.UNKNOWN && this.parent != null)
                     dt = parent.datatype;
                 writer.WriteLine(string.Format("DataType=0x{0:X4}", (int)dt));
-                writer.WriteLine(string.Format("AccessType={0}", accesstype.ToString()));
+                writer.WriteLine(string.Format("AccessType={0}", accesstype.ToString().Replace("cons","const")));
 
                 writer.WriteLine(string.Format("DefaultValue={0}", defaultvalue));
                 writer.WriteLine(string.Format("PDOMapping={0}", PDOMapping==true?1:0));
