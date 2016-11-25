@@ -66,6 +66,8 @@ namespace ODEditor
                 comboBox_accesstype.Items.Add(foo.ToString());
             }
 
+            comboBox_accesstype.Items.Add("0x1003 rw/ro");
+
 
             comboBox_memory.Items.Add("");
 
@@ -97,8 +99,6 @@ namespace ODEditor
             selectedobject.Description = textBox_description.Text;
             selectedobject.defaultvalue = textBox_defaultvalue.Text;
 
-            int.TryParse(textBox_subobjectoverride.Text, out selectedobject.accessParamNoSubObjectsOverride);
-
             if (!(selectedobject.parent != null && selectedobject.parent.objecttype == ObjectType.ARRAY))
             {
 
@@ -108,8 +108,22 @@ namespace ODEditor
                 DataType dt = (DataType)Enum.Parse(typeof(DataType), comboBox_datatype.SelectedItem.ToString());
                 selectedobject.datatype = dt;
 
-                EDSsharp.AccessType at = (EDSsharp.AccessType)Enum.Parse(typeof(EDSsharp.AccessType), comboBox_accesstype.SelectedItem.ToString());
-                selectedobject.accesstype = at;
+                if (comboBox_accesstype.SelectedItem.ToString() == "0x1003 rw/ro")
+                {
+                    selectedobject.accesstype = EDSsharp.AccessType.rw;
+                    for(byte p=0;p<selectedobject.subobjects.Count;p++)
+                    {
+                        if (selectedobject.subobjects[p].subindex == 0)
+                            selectedobject.subobjects[p].accesstype = EDSsharp.AccessType.rw;
+                        else
+                            selectedobject.subobjects[p].accesstype = EDSsharp.AccessType.ro;
+                    }
+                }
+                else
+                {
+                    EDSsharp.AccessType at = (EDSsharp.AccessType)Enum.Parse(typeof(EDSsharp.AccessType), comboBox_accesstype.SelectedItem.ToString());
+                    selectedobject.accesstype = at;
+                }
 
                 selectedobject.PDOtype = (PDOMappingType)Enum.Parse(typeof(PDOMappingType), comboBox_pdomap.SelectedItem.ToString());
 
@@ -127,12 +141,13 @@ namespace ODEditor
                 // on git hub for discussion why other parameters are not propogated here
                 // tl;dr; Limitations of CanOpenNode object dictionary perms for sub array objects
 
-                foreach(KeyValuePair<UInt16,ODentry>kvp in selectedobject.subobjects)
+                foreach (KeyValuePair<UInt16,ODentry>kvp in selectedobject.subobjects)
                 {
                     ODentry subod = kvp.Value;
 
                     subod.PDOtype = selectedobject.PDOtype;
-                    subod.accesstype = selectedobject.accesstype;
+                    if (comboBox_accesstype.SelectedItem.ToString() != "0x1003 rw/ro")
+                        subod.accesstype = selectedobject.accesstype;
 
                 }
             }
@@ -167,9 +182,6 @@ namespace ODEditor
 
             comboBox_accesstype.SelectedItem = od.accesstype.ToString();
 
-
-            textBox_subobjectoverride.Text = od.accessParamNoSubObjectsOverride.ToString();
-
             if (od.datatype != DataType.UNKNOWN)
             {
                 comboBox_datatype.SelectedItem = od.datatype.ToString();
@@ -190,6 +202,11 @@ namespace ODEditor
                         comboBox_datatype.SelectedItem = od.parent.datatype ;
                 }
             }
+
+            //Bug#25 set the combobox text to be the same as the selected item as this does not happen automaticly
+            //when the combobox is disabled
+            if (comboBox_datatype.SelectedItem!=null)
+                comboBox_datatype.Text = comboBox_datatype.SelectedItem.ToString();
 
             comboBox_objecttype.SelectedItem = od.objecttype.ToString();
             if(od.Description!=null)
@@ -392,6 +409,9 @@ namespace ODEditor
 
         private void list_mouseclick(ListView listview, MouseEventArgs e)
         {
+            if (listview.SelectedItems.Count == 0)
+                return;
+
             ListViewItem lvi = listview.SelectedItems[0];
             UInt16 idx = Convert.ToUInt16(lvi.Text, 16);
 
@@ -493,11 +513,23 @@ namespace ODEditor
                 {
                     if (od.subindex == 0 || od.parent == null)
                     {
-                        contextMenu_array.Items[1].Enabled = false;
+                        contextMenu_array.Items[2].Enabled = false;
                     }
                     else
                     {
-                        contextMenu_array.Items[1].Enabled = true;
+                        contextMenu_array.Items[2].Enabled = true;
+                    }
+
+                    //Only show the special subindex adjust menu for subindex 0 of arrays
+                    if((od.parent!=null) && (parent.objecttype == ObjectType.ARRAY) && (od.subindex==0))
+                    {
+                        contextMenu_array.Items[0].Enabled = true;
+                        contextMenu_array.Items[0].Visible = true;
+                    }
+                    else
+                    {
+                        contextMenu_array.Items[0].Enabled = false;
+                        contextMenu_array.Items[0].Visible = false;
                     }
 
                     if (listViewDetails.FocusedItem.Bounds.Contains(e.Location) == true)
@@ -646,6 +678,13 @@ namespace ODEditor
 
                 eds.ods.Add(od.index, od);
 
+                //Now switch to it as well Bug #26
+
+                updateselectedindexdisplay(od.index);
+                selectedobject = eds.ods[od.index];
+                validateanddisplaydata();
+
+
                 populateindexlists();
             }
 
@@ -658,7 +697,42 @@ namespace ODEditor
 
             ODentry od = (ODentry)item.Tag;
 
-            if (MessageBox.Show(string.Format("Really delete index 0x{0:x4} ?", od.index), "Are you sure?", MessageBoxButtons.YesNo) == DialogResult.Yes)
+            //Check object is not used in a PDO before deleting
+
+
+            for (UInt16 idx = 0x1600; idx < 0x1a00 + 0x01ff; idx++)
+            {
+
+                //Cheat as we want to only map 1600-17FF and 1a00-1bff
+                if (idx == 0x1800)
+                    idx = 0x1a00;
+
+                if (eds.ods.ContainsKey(idx))
+                {
+                    ODentry pdood = eds.ods[idx];
+                    for(byte subno=1;subno<pdood.nosubindexes;subno++)
+                    {
+                        try
+                        {
+                            UInt16 odindex = Convert.ToUInt16(pdood.subobjects[subno].defaultvalue.Substring(0, 4), 16);
+                            if(odindex==od.index)
+                            {
+                                MessageBox.Show(string.Format("Cannot delete OD entry it is mapped in PDO {0:4x}", pdood.index));
+                                return;
+                            }
+                        }
+                        catch(Exception ex)
+                        {
+                            //Failed to parse the PDO
+                        }
+                    }
+
+
+                }
+            }
+
+
+                    if (MessageBox.Show(string.Format("Really delete index 0x{0:x4} ?", od.index), "Are you sure?", MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
                 eds.ods.Remove(od.index);
                 populateindexlists();
@@ -771,7 +845,47 @@ namespace ODEditor
 
         }
 
+        private void listView_optional_objects_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            list_mouseclick(listView_optional_objects, new MouseEventArgs(MouseButtons.None, 0, 0, 0, 0));
+        }
 
+        private void listView_mandatory_objects_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            list_mouseclick(listView_mandatory_objects, new MouseEventArgs(MouseButtons.None, 0, 0, 0, 0));
+        }
+
+        private void listView_manufacture_objects_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            list_mouseclick(listView_manufacture_objects, new MouseEventArgs(MouseButtons.None, 0, 0, 0, 0));
+        }
+
+        private void changeMaxSubIndexToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            //Change the max subindex, it is allowed to have a different max subindex to the physical array size
+            //as depending on implementation it might not be a simple array behind the scenes. Even 0x1010,0x1011 
+            //do this on their implementation in CanopenNode
+
+            if (selecteditemsub.Tag != null)
+            {
+                ODentry od = (ODentry)selecteditemsub.Tag;
+
+                if (od.parent.objecttype == ObjectType.ARRAY && od.subindex==0)
+                {
+                    MaxSubIndexFrm frm = new MaxSubIndexFrm(od.nosubindexes);
+
+                    if(frm.ShowDialog()==DialogResult.OK)
+                    {
+                        od.defaultvalue = string.Format("0x{0:x2}",frm.maxsubindex);
+                        updateselectedindexdisplay(selectedobject.index);
+                        validateanddisplaydata();
+                    }
+                }
+            }
+
+
+            
+        }
     }
 
     public static class ControlExtensions

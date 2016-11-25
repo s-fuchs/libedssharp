@@ -542,16 +542,23 @@ namespace libEDSsharp
                     Warnings.warning_list.Add(String.Format("Unable to parse DateTime {0} for ModificationTime, not in DS306 format", dtcombined));
                 }
             }
-            
 
-            if (section.ContainsKey("EDSVersion"))
+
+            try
             {
-                string[] bits = section["EDSVersion"].Split('.');
-                if(bits.Length >=1 )
-                    EDSVersionMajor = Convert.ToByte(bits[0]);
-                if (bits.Length >= 2)
-                    EDSVersionMinor = Convert.ToByte(bits[1]);
-                //EDSVersion = String.Format("{0}.{1}", EDSVersionMajor, EDSVersionMinor);
+                if (section.ContainsKey("EDSVersion"))
+                {
+                    string[] bits = section["EDSVersion"].Split('.');
+                    if (bits.Length >= 1)
+                        EDSVersionMajor = Convert.ToByte(bits[0]);
+                    if (bits.Length >= 2)
+                        EDSVersionMinor = Convert.ToByte(bits[1]);
+                    //EDSVersion = String.Format("{0}.{1}", EDSVersionMajor, EDSVersionMinor);
+                }
+            }
+            catch
+            {
+                Warnings.warning_list.Add(String.Format("Unable to parse EDS version {0}", section["EDSVersion"]));
             }
 
 
@@ -666,8 +673,6 @@ namespace libEDSsharp
                 return PDOtype != PDOMappingType.no;
             }
         }
-
-        public int accessParamNoSubObjectsOverride = 0;
 
         public PDOMappingType PDOtype;
 
@@ -881,6 +886,54 @@ namespace libEDSsharp
 
             }
         }
+
+        //warning eds files with gaps in subobject lists have been seen in the wild
+        //this function tries to get the array index based on sub number not array number
+        //it may return null
+        //This needs expanding to be used globally through the application ;-(
+        public ODentry getsubobject(int no)
+        {
+            foreach(ODentry s in subobjects.Values)
+            {
+                if (s.subindex == no)
+                    return s;
+            }
+
+            return null;
+        }
+
+        public string getsubobjectdefaultvalue(int no)
+        {
+            foreach (ODentry s in subobjects.Values)
+            {
+                if (s.subindex == no)
+                    return s.defaultvalue;
+            }
+
+            return "";
+        }
+
+        public bool containssubindex(int no)
+        {
+            foreach (ODentry s in subobjects.Values)
+            {
+                if (s.subindex == no)
+                    return true;
+            }
+
+            return false;
+        }
+
+        public byte getmaxsubindex()
+        {
+            if (objecttype == ObjectType.ARRAY || objecttype == ObjectType.REC)
+                if (containssubindex(0))
+                {
+                    return EDSsharp.ConvertToByte(getsubobjectdefaultvalue(0));
+                }
+
+            return 0;
+        }
     }
 
     public class EDSsharp
@@ -899,6 +952,11 @@ namespace libEDSsharp
 
         public const AccessType AccessType_Min = AccessType.rw;
         public const AccessType AccessType_Max = AccessType.cons;
+
+
+        //This is the last file name used for this eds/xml file and is not
+        //the same as filename within the FileInfo structure.
+        public string filename;
 
         Dictionary<string, Dictionary<string, string>> eds;
         public SortedDictionary<UInt16, ODentry> ods;
@@ -1075,7 +1133,8 @@ namespace libEDSsharp
                     od.PDOtype = PDOMappingType.no;
                     if (kvp.Value.ContainsKey("PDOMapping"))
                     {
-                        bool pdo = Convert.ToInt16(kvp.Value["PDOMapping"]) == 1;
+                        
+                        bool pdo = Convert.ToInt16(kvp.Value["PDOMapping"],getbase(kvp.Value["PDOMapping"])) == 1;
                         if (pdo == true)
                             od.PDOtype = PDOMappingType.optional;
                     }
@@ -1094,6 +1153,8 @@ namespace libEDSsharp
 
         public void loadfile(string filename)
         {
+
+            this.filename = filename;
             //try
             {
                 foreach (string linex in File.ReadLines(filename))
@@ -1124,6 +1185,8 @@ namespace libEDSsharp
 
         public void savefile(string filename)
         {
+            this.filename = filename;
+
             updatePDOcount();
 
             StreamWriter writer = File.CreateText(filename);
@@ -1213,6 +1276,30 @@ namespace libEDSsharp
         }
 
 
+        static public byte ConvertToByte(string defaultvalue)
+        {
+            if (defaultvalue == null)
+                return 0;
+
+            return (Convert.ToByte(defaultvalue, getbase(defaultvalue)));
+        }
+
+        static public UInt16 ConvertToUInt16(string defaultvalue)
+        {
+            if (defaultvalue == null)
+                return 0;
+
+            return (Convert.ToUInt16(defaultvalue, getbase(defaultvalue)));
+        }
+
+        static public UInt32 ConvertToUInt32(string defaultvalue)
+        {
+            if (defaultvalue == null)
+                return 0;
+
+            return (Convert.ToUInt32(defaultvalue, getbase(defaultvalue)));
+        }
+
         static public int getbase(string defaultvalue)
         {
 
@@ -1221,7 +1308,7 @@ namespace libEDSsharp
 
             int nobase = 10;
 
-            String pat = @"^0[xX][0-9]+";
+            String pat = @"^0[xX][0-9a-fA-F]+";
 
             Regex r = new Regex(pat, RegexOptions.IgnoreCase);
             Match m = r.Match(defaultvalue);
@@ -1274,6 +1361,12 @@ namespace libEDSsharp
                 input = input.Replace("$NODEID", String.Format("0x{0}", di.concreteNodeId));
 
                 string[] bits = input.Split('+');
+
+                if(bits.Length==1)
+                {
+                    //nothing to parse here just return the value
+                    return Convert.ToUInt16(input, getbase(input));
+                }
 
                 if (bits.Length != 2)
                 {
@@ -1431,7 +1524,7 @@ mapped object  (subindex 1...8)
                 od_comparam.subobjects.Add(4, sub);
                 sub = new ODentry("event timer", index, 5, DataType.UNSIGNED16, "0", AccessType.rw, PDOMappingType.no);
                 od_comparam.subobjects.Add(5, sub);
-                sub = new ODentry("SYNC start", index, 6, DataType.UNSIGNED8, "0", AccessType.rw, PDOMappingType.no);
+                sub = new ODentry("SYNC start value", index, 6, DataType.UNSIGNED8, "0", AccessType.rw, PDOMappingType.no);
                 od_comparam.subobjects.Add(6, sub);
 
             }

@@ -35,14 +35,20 @@ namespace libEDSsharp
         private string folderpath;
         private EDSsharp eds;
 
+        private int enabledcount = 0;
+
     //    Dictionary<DataType, defstruct> defstructs = new Dictionary<DataType, defstruct>();
 
         public void export(string folderpath, EDSsharp eds)
         {
             this.folderpath = folderpath;
             this.eds = eds;
-
-            //init_defstructs();
+     
+            foreach (KeyValuePair<UInt16, ODentry> kvp in eds.ods)
+            {
+                if (kvp.Value.Disabled == false)
+                    enabledcount++;
+            }
 
             countPDOS();
 
@@ -286,17 +292,7 @@ namespace libEDSsharp
    OBJECT DICTIONARY
 *******************************************************************************/");
 
-            //HACk, count the number of enabeld elements here is eds.ods.Count contains disabled entries as well
-
-            int count = 0;
-
-            foreach(KeyValuePair<UInt16,ODentry>kvp in eds.ods)
-            {
-                if (kvp.Value.Disabled == false)
-                    count++;
-            }
-
-            file.WriteLine(string.Format("   #define CO_OD_NoOfElements             {0}", count));
+            file.WriteLine(string.Format("   #define CO_OD_NoOfElements             {0}", enabledcount));
             file.WriteLine("");
             file.WriteLine("");
 
@@ -561,7 +557,8 @@ struct sCO_OD_ROM CO_OD_ROM = {    //constant variables, stored in flash
 *******************************************************************************/
 const CO_OD_entry_t CO_OD[");
             
-            file.Write(string.Format("{0}",eds.ods.Count));
+
+            file.Write(string.Format("{0}", enabledcount));
 
             file.WriteLine(@"] = {
 ");
@@ -614,7 +611,7 @@ const CO_OD_entry_t CO_OD[");
                     count++;
                 }
 
-                //Arrays and Recshave 1 less subindex than actually present in the od.subobjects
+                //Arrays and Recs have 1 less subindex than actually present in the od.subobjects
                 int nosubindexs = od.nosubindexes;
                 if (od.objecttype == ObjectType.ARRAY || od.objecttype == ObjectType.REC)
                 {
@@ -622,12 +619,15 @@ const CO_OD_entry_t CO_OD[");
                         nosubindexs--;
                 }
 
-                //a special hack for OD entries that use acccess functions
-                //eg the eeprom 0x1011 function that acceps sub index 0x7F but 
-                //actually has no specific array storage allocated
-                //It only appears here in the OD not in the array define
-                if (od.accessParamNoSubObjectsOverride != 0)
-                    nosubindexs = od.accessParamNoSubObjectsOverride;
+                //Arrays really should obey the max subindex paramater not the physical number of elements
+                if (od.objecttype == ObjectType.ARRAY)
+                {
+                    if (od.getmaxsubindex() != nosubindexs)
+                    {
+                        Warnings.warning_list.Add(String.Format("Subindex descripency on object 0x{0:x4} arraysize: {1} vs max-subindex: {2}", od.index, nosubindexs, od.getmaxsubindex()));
+                    }
+                    nosubindexs = od.getmaxsubindex();
+                }
 
                 string pdata; //CO_OD_entry_t pData generator
 
@@ -896,6 +896,9 @@ const CO_OD_entry_t CO_OD[");
        {
             if (name == null)
                 return null;
+
+            if (name == "")
+                return "";
 
            string[] bits = Regex.Split(name,@"[\W]+");
 
