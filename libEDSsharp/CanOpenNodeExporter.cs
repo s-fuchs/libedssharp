@@ -221,20 +221,16 @@ namespace libEDSsharp
             file.WriteLine(@"/*******************************************************************************
    CANopen DATA DYPES
 *******************************************************************************/
-   typedef uint8_t      UNSIGNED8;
-   typedef uint16_t     UNSIGNED16;
-   typedef uint32_t     UNSIGNED32;
-   typedef uint64_t     UNSIGNED64;
-   typedef int8_t       INTEGER8;
-   typedef int16_t      INTEGER16;
-   typedef int32_t      INTEGER32;
-   typedef int64_t      INTEGER64;
-   typedef float32_t    REAL32; 
-   typedef float64_t    REAL64; 
-   typedef char_t       VISIBLE_STRING;
-   typedef oChar_t      OCTET_STRING;
-   typedef domain_t     DOMAIN;
-
+   typedef uint8_t        UNSIGNED8;
+   typedef uint16_t       UNSIGNED16;
+   typedef uint32_t       UNSIGNED32;
+   typedef int8_t         INTEGER8;
+   typedef int16_t        INTEGER16;
+   typedef int32_t        INTEGER32;
+   typedef float          REAL32; 
+   typedef char           VISIBLE_STRING;
+   typedef unsigned char  OCTET_STRING;
+   typedef unsigned char  DOMAIN;
 ");
 
             file.WriteLine("/*******************************************************************************");
