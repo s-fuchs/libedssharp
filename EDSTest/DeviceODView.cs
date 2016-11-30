@@ -264,12 +264,13 @@ namespace ODEditor
             comboBox_memory.Enabled = false;
             checkBox_COS.Enabled = false;
             checkBox_enabled.Enabled = false;
-            checkBox_COS.Checked = od.parent.TPDODetectCos;
+          
             checkBox_enabled.Checked = !od.parent.Disabled;
 
             if (od.parent.objecttype == ObjectType.ARRAY && od.subindex != 0)
             {
                 textBox_defaultvalue.Enabled = true;
+                checkBox_COS.Checked = od.parent.TPDODetectCos;
 
             }
 
@@ -885,6 +886,26 @@ namespace ODEditor
 
 
             
+        }
+
+        private void textBox_precode_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void label14_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void label13_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void textBox_accessfunctionname_TextChanged(object sender, EventArgs e)
+        {
+
         }
     }
 
