@@ -791,7 +791,7 @@ namespace libEDSsharp
                 if (dt == DataType.UNKNOWN && this.parent != null)
                     dt = parent.datatype;
                 writer.WriteLine(string.Format("DataType=0x{0:X4}", (int)dt));
-                writer.WriteLine(string.Format("AccessType={0}", accesstype.ToString().Replace("cons","const")));
+                writer.WriteLine(string.Format("AccessType={0}", accesstype.ToString()));
 
                 writer.WriteLine(string.Format("DefaultValue={0}", defaultvalue));
                 writer.WriteLine(string.Format("PDOMapping={0}", PDOMapping==true?1:0));
