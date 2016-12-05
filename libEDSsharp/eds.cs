@@ -489,7 +489,9 @@ namespace libEDSsharp
         [EdsExport]
         public string ModifiedBy="";//=CANFestival //max244
 
+        //Folder CO_OD.c and CO_OD.h will be exported into
         public string exportFolder = "";
+
 
         public FileInfo(Dictionary<string, string> section)
         {
@@ -946,20 +948,40 @@ namespace libEDSsharp
             wo = 2,
             rwr = 3,
             rww = 4,
-            cons = 5,
+            @const = 5,
             UNKNOWN
         }
 
         public const AccessType AccessType_Min = AccessType.rw;
-        public const AccessType AccessType_Max = AccessType.cons;
+        public const AccessType AccessType_Max = AccessType.@const;
 
 
         //This is the last file name used for this eds/xml file and is not
         //the same as filename within the FileInfo structure.
-        public string filename;
+        public string edsfilename = null;
+        public string xmlfilename = null;
+
+        //property to indicate unsaved data;
+        private bool _dirty;
+        public bool dirty
+        {
+            get
+            {
+                return _dirty;
+            }
+            set
+            {
+                _dirty = value;
+                if (onDataDirty != null)
+                    onDataDirty(_dirty,this);
+
+            }
+        }
 
         Dictionary<string, Dictionary<string, string>> eds;
         public SortedDictionary<UInt16, ODentry> ods;
+        public SortedDictionary<UInt16, ODentry> dummy_ods;
+
         public FileInfo fi;
         public DeviceInfo di;
         public MandatoryObjects md;
@@ -970,13 +992,16 @@ namespace libEDSsharp
 
         public UInt16 NodeId = 0;
 
-
+        public delegate void DataDirty(bool dirty, EDSsharp sender);
+        public event DataDirty onDataDirty;
 
         public EDSsharp()
         {
 
+
             eds = new Dictionary<string, Dictionary<string, string>>();
             ods = new SortedDictionary<UInt16, ODentry>();
+            dummy_ods = new SortedDictionary<UInt16, ODentry>();
 
             fi = new FileInfo();
             di = new DeviceInfo();
@@ -1008,10 +1033,17 @@ namespace libEDSsharp
 
             ODentry od = new ODentry();
 
+            dummy_ods.Add(2, new ODentry("Dummy Int8", 0x002, 0x00, DataType.INTEGER8, "0", AccessType.ro, PDOMappingType.optional));
+            dummy_ods.Add(3, new ODentry("Dummy Int16", 0x002, 0x00, DataType.INTEGER16, "0", AccessType.ro, PDOMappingType.optional));
+            dummy_ods.Add(4, new ODentry("Dummy Int32", 0x002, 0x00, DataType.INTEGER32, "0", AccessType.ro, PDOMappingType.optional));
+            dummy_ods.Add(5, new ODentry("Dummy UInt8", 0x002, 0x00, DataType.UNSIGNED8, "0", AccessType.ro, PDOMappingType.optional));
+            dummy_ods.Add(6, new ODentry("Dummy UInt16", 0x002, 0x00, DataType.UNSIGNED16, "0", AccessType.ro, PDOMappingType.optional));
+            dummy_ods.Add(7, new ODentry("Dummy UInt32", 0x002, 0x00, DataType.UNSIGNED32, "0", AccessType.ro, PDOMappingType.optional));
 
+        }
 
-
-
+        public void setdirty()
+        {
 
         }
 
@@ -1116,8 +1148,6 @@ namespace libEDSsharp
 
                     string accesstype = kvp.Value["AccessType"];
 
-                    // fudging because of enum enumeration and the const keyword
-                    accesstype = accesstype.Replace("const", "cons");
                     if (Enum.IsDefined(typeof(AccessType), accesstype))
                     {
                         od.accesstype = (AccessType)Enum.Parse(typeof(AccessType), accesstype);
@@ -1154,7 +1184,7 @@ namespace libEDSsharp
         public void loadfile(string filename)
         {
 
-            this.filename = filename;
+            edsfilename = filename;
             //try
             {
                 foreach (string linex in File.ReadLines(filename))
@@ -1185,7 +1215,7 @@ namespace libEDSsharp
 
         public void savefile(string filename)
         {
-            this.filename = filename;
+            this.edsfilename = filename;
 
             updatePDOcount();
 
@@ -1194,6 +1224,32 @@ namespace libEDSsharp
             di.write(writer);
             du.write(writer);
             c.write(writer);
+
+
+            //regenerate the object lists
+            md.objectlist.Clear();
+            mo.objectlist.Clear();
+            oo.objectlist.Clear();
+
+            foreach (KeyValuePair<UInt16, ODentry> kvp in ods)
+            {
+                ODentry entry = kvp.Value;
+
+                if (entry.index == 0x1000 || entry.index == 0x1001 || entry.index == 0x1018)
+                {
+                    md.objectlist.Add(md.objectlist.Count + 1, entry.index);
+                }
+                else
+               if (entry.index >= 0x2000 && entry.index < 0x6000)
+                {
+                    mo.objectlist.Add(mo.objectlist.Count + 1, entry.index);
+                }
+                else
+                {
+                    oo.objectlist.Add(oo.objectlist.Count + 1, entry.index);
+                }
+            }
+
             md.write(writer);
 
             foreach (KeyValuePair<UInt16, ODentry> kvp in ods)
@@ -1558,8 +1614,23 @@ mapped object  (subindex 1...8)
         {
             return createPDO(true, index);
         }
-     
 
+        public ODentry getobject(UInt16 no)
+        {
+
+            if(no>=0x002 && no<=0x007)
+            {
+                return dummy_ods[no];
+            }
+
+            if (ods.ContainsKey(no))
+            {
+                return ods[no];
+            }
+
+            return null;
+
+        }
     }
 
         public class ParameterException : Exception

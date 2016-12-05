@@ -41,6 +41,8 @@ namespace ODEditor
         private List<string> _mru = new List<string>();
         private string appdatafolder;
 
+        private string networkfilename;
+
         public static Dictionary<UInt16, EDSsharp> TXCobMap = new Dictionary<UInt16, EDSsharp>();
         List<EDSsharp> network = new List<EDSsharp>();
 
@@ -135,6 +137,8 @@ namespace ODEditor
 
                 DeviceView device = new DeviceView();
 
+                eds.onDataDirty += Eds_onDataDirty;
+
                 device.eds = eds;
                 tabControl1.TabPages.Add(eds.di.ProductName);
                 tabControl1.TabPages[tabControl1.TabPages.Count - 1].Controls.Add(device);
@@ -165,7 +169,6 @@ namespace ODEditor
                 SaveFileDialog sfd = new SaveFileDialog();
                 sfd.CheckFileExists = false;
 
-                
                 sfd.FileName = "CO_OD.c";
                 sfd.InitialDirectory = dv.eds.fi.exportFolder;
                 sfd.RestoreDirectory = true;
@@ -222,13 +225,15 @@ namespace ODEditor
                 Bridge b = new Bridge();
 
                 eds = b.convert(coxml.dev);
-                eds.filename = path;
+                eds.xmlfilename = path;
 
                 dev = coxml.dev;
 
                 tabControl1.TabPages.Add(eds.di.ProductName);
 
                 DeviceView device = new DeviceView();
+
+                eds.onDataDirty += Eds_onDataDirty;
 
                 device.eds = eds;
                 tabControl1.TabPages[tabControl1.TabPages.Count - 1].Controls.Add(device);
@@ -252,6 +257,30 @@ namespace ODEditor
 
         }
 
+        private void Eds_onDataDirty(bool dirty, EDSsharp sender)
+        {
+            foreach(TabPage page in tabControl1.TabPages)
+            {
+                foreach(Control c in page.Controls)
+                {
+                    if(c.GetType() == typeof(DeviceView))
+                    {
+                        DeviceView d = (DeviceView)c;
+                        if (d.eds.dirty == true)
+                        {
+                            page.BackColor = Color.Red;
+                        }
+                        else
+                        {
+                            page.BackColor = default(Color);
+                        }
+                    }
+
+                }
+
+            }
+
+        }
 
         private void tabControl1_DrawItem(Object sender, System.Windows.Forms.DrawItemEventArgs e)
         {
@@ -294,6 +323,13 @@ namespace ODEditor
                 // tabControl1.TabPages[tabControl1.TabPages.Count - 1].Controls.Add(device);
 
                 DeviceView device = (DeviceView)tabControl1.SelectedTab.Controls[0];
+
+                if(device.eds.dirty==true)
+                {
+                    if (MessageBox.Show( "All usaved changes will be lost\n continue?", "Unsaved changes", MessageBoxButtons.YesNo) == DialogResult.No)
+                        return;
+                }
+
                 network.Remove(device.eds);
 
                 tabControl1.TabPages.Remove(tabControl1.SelectedTab);
@@ -303,7 +339,7 @@ namespace ODEditor
 
         private void quitToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            Close();
+             Close();
         }
 
         private void saveEDSToolStripMenuItem_Click(object sender, EventArgs e)
@@ -315,9 +351,9 @@ namespace ODEditor
 
                 sfd.Filter = "Electronic Data Sheets (*.eds)|*.eds";
 
-                sfd.InitialDirectory = Path.GetDirectoryName(dv.eds.filename);
+                sfd.InitialDirectory = Path.GetDirectoryName(dv.eds.edsfilename);
                 sfd.RestoreDirectory = true;
-                sfd.FileName = Path.GetFileNameWithoutExtension(dv.eds.filename);
+                sfd.FileName = Path.GetFileNameWithoutExtension(dv.eds.edsfilename);
 
                 if (sfd.ShowDialog() == DialogResult.OK)
                 {
@@ -336,9 +372,9 @@ namespace ODEditor
 
                     sfd.Filter = "Canopen Node XML (*.xml)|*.xml";
 
-                    sfd.InitialDirectory = Path.GetDirectoryName(dv.eds.filename);
+                    sfd.InitialDirectory = Path.GetDirectoryName(dv.eds.xmlfilename);
                     sfd.RestoreDirectory = true;
-                    sfd.FileName = Path.GetFileNameWithoutExtension(dv.eds.filename);
+                    sfd.FileName = Path.GetFileNameWithoutExtension(dv.eds.xmlfilename);
 
                 if (sfd.ShowDialog() == DialogResult.OK)
                     {
@@ -351,6 +387,8 @@ namespace ODEditor
                         coxml.dev = d;
 
                         coxml.writeXML(sfd.FileName);
+
+                        dv.eds.dirty = false;
     
                     }
 
@@ -367,6 +405,8 @@ namespace ODEditor
             DeviceView device = new DeviceView();
 
             device.eds = eds;
+            eds.onDataDirty += Eds_onDataDirty;
+
             tabControl1.TabPages[tabControl1.TabPages.Count - 1].Controls.Add(device);
             device.Dock = DockStyle.Fill;
 
@@ -394,6 +434,7 @@ namespace ODEditor
             saveNetworkXmlToolStripMenuItem.Enabled = enable;
             documentationToolStripMenuItem.Enabled = enable;
             networkPDOToolStripMenuItem.Enabled = enable;
+            saveExportAllToolStripMenuItem.Enabled = enable;
 
         }
 
@@ -492,6 +533,9 @@ namespace ODEditor
 
             sfd.Filter = "CanOpen network XML (*.nxml)|*.nxml";
 
+            sfd.InitialDirectory = Path.GetDirectoryName(networkfilename);
+            sfd.RestoreDirectory = true;
+            sfd.FileName = Path.GetFileNameWithoutExtension(networkfilename);
 
             if (sfd.ShowDialog() == DialogResult.OK)
             {
@@ -538,11 +582,14 @@ namespace ODEditor
                 device.Dock = DockStyle.Fill;
 
                 network.Add(eds);
+                eds.onDataDirty += Eds_onDataDirty;
 
                 device.dispatch_updateOD();
 
                 addtoMRU(file);
             }
+
+            networkfilename = file;
         }
 
         private void networkPDOToolStripMenuItem_Click(object sender, EventArgs e)
@@ -590,6 +637,91 @@ namespace ODEditor
             {
                 WarningsFrm frm = new WarningsFrm();
                 frm.ShowDialog();
+            }
+        }
+
+        private void saveExportAllToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            //Attempt to save EDS,XML and export the CanOpen dictionary
+
+            if (tabControl1.SelectedTab != null)
+            {
+                DeviceView dv = (DeviceView)tabControl1.SelectedTab.Controls[0];
+                SaveFileDialog sfd = new SaveFileDialog();
+
+                //save eds xml and export CO_OD.c and CO_OD.h
+
+                if (dv.eds.edsfilename == null || dv.eds.edsfilename == "")
+                {
+                    MessageBox.Show("Please manually save as EDS at least once");
+                    return;
+                }
+
+                if (dv.eds.xmlfilename == null || dv.eds.xmlfilename == "")
+                {
+                    MessageBox.Show("Please manually save as XML at least once");
+                    return;
+                }
+
+                if (dv.eds.fi.exportFolder == null || dv.eds.fi.exportFolder == "")
+                {
+                    MessageBox.Show("Please expot CO_OD.c/h at least once");
+                    return;
+                }
+
+                //export XML
+                Bridge b = new Bridge();
+                Device d = b.convert(dv.eds);
+
+                CanOpenXML coxml = new CanOpenXML();
+                coxml.dev = d;
+
+                coxml.writeXML(dv.eds.xmlfilename);
+
+
+                //export EDS
+                dv.eds.savefile(dv.eds.edsfilename);
+
+                //export CO_OD.c and CO_OD.h
+                CanOpenNodeExporter cone = new CanOpenNodeExporter();
+                cone.export(dv.eds.fi.exportFolder, dv.eds);
+
+                if (Warnings.warning_list.Count != 0)
+                {
+                    WarningsFrm frm = new WarningsFrm();
+                    frm.ShowDialog();
+                }
+
+
+
+
+
+            }
+        }
+
+        private void ODEditor_MainForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+
+            foreach (TabPage page in tabControl1.TabPages)
+            {
+                foreach (Control c in page.Controls)
+                {
+                    if (c.GetType() == typeof(DeviceView))
+                    {
+                        DeviceView d = (DeviceView)c;
+                        if (d.eds.dirty == true)
+                        {
+                           if(MessageBox.Show("Warning you have unsaved changes\n Do you wish to continue","Unsaved changes",MessageBoxButtons.YesNo)==DialogResult.No)
+                            {
+                                e.Cancel = true;
+                                return;
+                            }
+                        }
+                       
+                    }
+
+                }
+
             }
         }
     }
