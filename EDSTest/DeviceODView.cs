@@ -831,7 +831,8 @@ namespace ODEditor
                     newsub.subindex = (UInt16)od.parent.subobjects.Count;
                     od.parent.subobjects.Add((UInt16)(od.parent.subobjects.Count), newsub);
 
-                    UInt16 def = Convert.ToUInt16(od.parent.subobjects[0].defaultvalue,16);
+                    UInt16 def = EDSsharp.ConvertToUInt16(od.parent.subobjects[0].defaultvalue);
+
                     def++;
                     od.parent.subobjects[0].defaultvalue = def.ToString();
 
@@ -856,7 +857,7 @@ namespace ODEditor
 
                         od.parent.subobjects.Add((UInt16)(od.parent.subobjects.Count), newsub);
 
-                        UInt16 def = Convert.ToUInt16(od.parent.subobjects[0].defaultvalue,16);
+                        UInt16 def = EDSsharp.ConvertToUInt16(od.parent.subobjects[0].defaultvalue);
                         def++;
                         od.parent.subobjects[0].defaultvalue = def.ToString();
                     }
@@ -877,7 +878,7 @@ namespace ODEditor
 
                 if (od.parent.objecttype == ObjectType.ARRAY)
                 {
-                    UInt16 count = Convert.ToUInt16(od.parent.subobjects[0].defaultvalue);
+                    UInt16 count = EDSsharp.ConvertToUInt16(od.parent.subobjects[0].defaultvalue);
                     if (count > 0)
                         count--;
                     od.parent.subobjects[0].defaultvalue = count.ToString();
