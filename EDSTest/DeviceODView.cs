@@ -164,6 +164,8 @@ namespace ODEditor
                     ODentry subod = kvp.Value;
 
                     subod.PDOtype = selectedobject.PDOtype;
+                    if (kvp.Key != 0)
+                        subod.datatype = selectedobject.datatype;
                     if (comboBox_accesstype.SelectedItem.ToString() != "0x1003 rw/ro")
                         subod.accesstype = selectedobject.accesstype;
 
@@ -824,7 +826,9 @@ namespace ODEditor
                 {
                     ODentry newsub = new ODentry();
                     newsub.parent = od.parent;
-                    newsub.datatype = DataType.UNKNOWN;
+                    newsub.datatype = od.parent.datatype;
+                    newsub.accesstype = od.parent.accesstype;
+                    newsub.PDOtype = od.parent.PDOtype;
                     newsub.index = od.index;
                     newsub.objecttype = ObjectType.VAR;
                     newsub.subindex = (UInt16)od.parent.subobjects.Count;
