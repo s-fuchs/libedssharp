@@ -166,7 +166,7 @@ namespace ODEditor
                     subod.PDOtype = selectedobject.PDOtype;
                     if (kvp.Key != 0)
                         subod.datatype = selectedobject.datatype;
-                    if (comboBox_accesstype.SelectedItem.ToString() != "0x1003 rw/ro")
+                    if (comboBox_accesstype.SelectedItem.ToString() != "0x1003 rw/ro" && kvp.Key != 0)
                         subod.accesstype = selectedobject.accesstype;
 
                 }
